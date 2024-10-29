@@ -4,6 +4,7 @@ const app = express();
 const port = 3000;
 
 app.use(cors());
+app.use(express.json());
 
 const mysql = require("mysql2");
 const connection = mysql.createConnection({
@@ -12,6 +13,28 @@ const connection = mysql.createConnection({
   password: "root",
   database: "tier_list_dfs_24",
   connectionLimit: 10,
+});
+
+app.post("/login", (req, res) => {
+  const utilisateur = req.body;
+
+  connection.execute(
+    `SELECT id
+    FROM utilisateur u
+    WHERE u.email = ?
+    AND u.password = ?`,
+    [utilisateur.email, utilisateur.password],
+    (err, rows) => {
+      if (err) throw err;
+
+      //si l'utilisateur n'a pas été trouvé
+      if (rows.length == 0) {
+        res.status(403).send();
+      } else {
+        res.status(200).send();
+      }
+    }
+  );
 });
 
 app.get("/categories", (req, res) => {
