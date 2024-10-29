@@ -11,20 +11,18 @@ const connection = mysql.createConnection({
   user: "root",
   password: "root",
   database: "tier_list_dfs_24",
+  connectionLimit: 10,
 });
 
 app.get("/test", (req, res) => {
-  connection.connect();
 
+  
   connection.query(
     ` SELECT url, i.id AS id_image, id_categorie, nom
     FROM image i
     JOIN categorie c ON i.id_categorie = c.id
     WHERE c.id_utilisateur = 1`,
     (err, rows) => {
-      
-      connection.end();
-
       if (err) throw err;
 
       res.send(JSON.stringify(rows));
