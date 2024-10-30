@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 const port = 3000;
+const jwt = require("jsonwebtoken");
+const secret_jwt = "azerty123456789";
 
 app.use(cors());
 app.use(express.json());
@@ -31,79 +33,98 @@ app.post("/login", (req, res) => {
       if (rows.length == 0) {
         res.status(403).send();
       } else {
-        res.status(200).send();
+        const jwt_utilisateur = jwt.sign({ sub: rows[0].id }, secret_jwt, {});
+
+        res.status(200).send(JSON.stringify({ jwt: jwt_utilisateur }));
       }
     }
   );
 });
 
 app.get("/categories", (req, res) => {
-  connection.query(
-    ` SELECT url, i.id AS id_image, c.id as id_categorie, nom AS nom_categorie
-    FROM image i
-    RIGHT JOIN categorie c ON i.id_categorie = c.id
-    WHERE c.id_utilisateur = 1`,
-    (err, rows) => {
-      if (err) throw err;
+  //on recupere le jwt dans le header authorization
+  const jwt_utilisateur = req.headers.authorization;
 
-      // //solution 1 :
+  //si il n'y a pas d'entete authorization on bloque la requete
+  if (!jwt_utilisateur) {
+    res.status(403).send();
+  } else {
+    //on vérifie que le JWT est valide
+    jwt.verify(jwt_utilisateur, secret_jwt, (err, donnees_jwt) => {
+      //si la signature ne correspond pas ou si le jwt est invalide
+      if (err) return res.sendStatus(403);
 
-      // //on réalise une structure différente du résultat :
-      // // un tableau avec des objet possédant le nom de la catégorie et les images liées
-      // const groupeParCategorie = {};
+      const id_utilisateur = donnees_jwt.sub;
 
-      // //on parcours toutes les lignes du résultat de la requete (qui contienneny chaque images)
-      // for (let image of rows) {
-      //   //si la catégorie de l'image n'a pas encore été ajoutée, on l'ajoute,
-      //   // sinon on ajoute seulement l'image dans sa liste d'images
-      //   if (groupeParCategorie[image.nom_categorie]) {
-      //     groupeParCategorie[image.nom_categorie].images.push(image.url);
-      //   } else {
-      //     groupeParCategorie[image.nom_categorie] = {
-      //       id: image.id_categorie,
-      //       nom: image.nom_categorie,
-      //       images: image.url ? [image.url] : [],
-      //     };
-      //   }
-      // }
+      connection.execute(
+        ` SELECT url, i.id AS id_image, c.id as id_categorie, nom AS nom_categorie
+          FROM image i
+          RIGHT JOIN categorie c ON i.id_categorie = c.id
+          WHERE c.id_utilisateur = ?`,
+        [id_utilisateur],
+        (err, rows) => {
+          if (err) throw err;
 
-      // //on transforme en tableau l'objet qui nous a servis
-      // // à regrouper les images par catégorie
-      // const categories = [];
+          // //solution 1 :
 
-      // //on parcours tous les noms des propriétés de l'objet qui regroupe les image par catégiorie
-      // for (let nomCategorie in groupeParCategorie) {
-      //   categories.push(groupeParCategorie[nomCategorie]);
-      // }
+          // //on réalise une structure différente du résultat :
+          // // un tableau avec des objet possédant le nom de la catégorie et les images liées
+          // const groupeParCategorie = {};
 
-      // res.send(JSON.stringify(categories));
+          // //on parcours toutes les lignes du résultat de la requete (qui contienneny chaque images)
+          // for (let image of rows) {
+          //   //si la catégorie de l'image n'a pas encore été ajoutée, on l'ajoute,
+          //   // sinon on ajoute seulement l'image dans sa liste d'images
+          //   if (groupeParCategorie[image.nom_categorie]) {
+          //     groupeParCategorie[image.nom_categorie].images.push(image.url);
+          //   } else {
+          //     groupeParCategorie[image.nom_categorie] = {
+          //       id: image.id_categorie,
+          //       nom: image.nom_categorie,
+          //       images: image.url ? [image.url] : [],
+          //     };
+          //   }
+          // }
 
-      //solution 2 :
+          // //on transforme en tableau l'objet qui nous a servis
+          // // à regrouper les images par catégorie
+          // const categories = [];
 
-      const categories = rows.reduce((accumulateur, image) => {
-        //si on trouve la catégorie on ajoute l'image à cette c&tégorie,
-        //sinon on ajoute un nouvel objet au tableau
+          // //on parcours tous les noms des propriétés de l'objet qui regroupe les images par catégiorie
+          // for (let nomCategorie in groupeParCategorie) {
+          //   categories.push(groupeParCategorie[nomCategorie]);
+          // }
 
-        const categorieExistante = accumulateur.filter(
-          (categorie) => categorie.nom == image.nom_categorie
-        );
+          // res.send(JSON.stringify(categories));
 
-        if (categorieExistante.length >= 1) {
-          categorieExistante[0].images.push(image.url);
-        } else {
-          accumulateur.push({
-            nom: image.nom_categorie,
-            id: image.id_categorie,
-            images: image.url ? [image.url] : [],
-          });
+          //solution 2 :
+
+          const categories = rows.reduce((accumulateur, image) => {
+            //si on trouve la catégorie on ajoute l'image à cette c&tégorie,
+            //sinon on ajoute un nouvel objet au tableau
+
+            const categorieExistante = accumulateur.filter(
+              (categorie) => categorie.nom == image.nom_categorie
+            );
+
+            if (categorieExistante.length >= 1) {
+              categorieExistante[0].images.push(image.url);
+            } else {
+              accumulateur.push({
+                nom: image.nom_categorie,
+                id: image.id_categorie,
+                images: image.url ? [image.url] : [],
+              });
+            }
+
+            return accumulateur;
+          }, []);
+
+          res.send(JSON.stringify(categories));
         }
-
-        return accumulateur;
-      }, []);
-
-      res.send(JSON.stringify(categories));
-    }
-  );
+      );
+    });
+  }
 });
 
 app.listen(port, () => {
